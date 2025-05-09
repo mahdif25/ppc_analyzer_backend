@@ -1,0 +1,357 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPC Campaign Analyzer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .upload-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px dashed #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .upload-section label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 15px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .date-range-section {
+            margin-bottom: 20px;
+        }
+        .date-range-section label {
+            margin-right: 10px;
+        }
+        .kpi-section table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .kpi-section th, .kpi-section td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .kpi-section th {
+            background-color: #f2f2f2;
+        }
+        .recommendation-section {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            background-color: #fdfdfd;
+        }
+        .recommendation-section h3 {
+            margin-top: 0;
+        }
+        .status-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Amazon PPC Campaign Analyzer</h1>
+
+        <div id="statusMessage" class="status-message" style="display:none;"></div>
+
+        <div class="upload-section">
+            <label for="fileUpload">Upload Amazon PPC Bulk Report(s) (.csv):</label>
+            <input type="file" id="fileUpload" name="fileUpload" accept=".csv" multiple>
+            <button onclick="handleFileUpload()">Upload and Process</button>
+        </div>
+
+        <div class="date-range-section">
+            <label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" name="startDate">
+            <label for="endDate">End Date:</label>
+            <input type="date" id="endDate" name="endDate">
+            <button onclick="applyDateFilter()">Apply Date Filter</button>
+        </div>
+
+        <div class="kpi-section">
+            <h2>Campaign Performance KPIs</h2>
+            <table id="kpiTable">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                        <!-- <th>Trend</th> -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>ACOS</td><td id="acosValue">-</td></tr>
+                    <tr><td>TACOS (Simplified)</td><td id="tacosValue">-</td></tr>
+                    <tr><td>ROAS</td><td id="roasValue">-</td></tr>
+                    <tr><td>Impressions</td><td id="impressionsValue">-</td></tr>
+                    <tr><td>Clicks</td><td id="clicksValue">-</td></tr>
+                    <tr><td>CTR</td><td id="ctrValue">-</td></tr>
+                    <tr><td>Spend</td><td id="spendValue">-</td></tr>
+                    <tr><td>CPC</td><td id="cpcValue">-</td></tr>
+                    <tr><td>CVR (Conversion Rate)</td><td id="cvrValue">-</td></tr>
+                    <tr><td>Sales</td><td id="salesValue">-</td></tr>
+                    <tr><td>Orders</td><td id="ordersValue">-</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="recommendation-section">
+            <h3>Recommendations</h3>
+            <div id="recommendationsOutput">
+                <p>Upload a report to see recommendations.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let rawFullData = []; // Stores the full dataset from backend for client-side filtering
+
+        function displayStatus(message, isError = false) {
+            const statusDiv = document.getElementById("statusMessage");
+            statusDiv.textContent = message;
+            statusDiv.className = isError ? "status-message error" : "status-message success";
+            statusDiv.style.display = "block";
+        }
+
+        function clearStatus() {
+            const statusDiv = document.getElementById("statusMessage");
+            statusDiv.style.display = "none";
+        }
+
+        async function handleFileUpload() {
+            clearStatus();
+            const fileInput = document.getElementById("fileUpload");
+            const files = fileInput.files;
+            if (files.length === 0) {
+                displayStatus("Please select one or more CSV files.", true);
+                return;
+            }
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("files[]", files[i]);
+            }
+
+            displayStatus("Uploading and processing files...", false);
+            document.getElementById("recommendationsOutput").innerHTML = "<p>Processing...</p>";
+            clearKpiTable();
+
+            try {
+                const response = await fetch("/upload_ppc_reports", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayStatus(result.message || "Files processed successfully!", false);
+                    rawFullData = result.full_data_for_frontend_filtering || [];
+                    if (rawFullData.length > 0) {
+                         // Apply default date range or display all data initially
+                        applyDateFilter(); // This will call displayKpis and displayRecommendations
+                    } else {
+                        document.getElementById("recommendationsOutput").innerHTML = "<p>No data returned from backend after processing.</p>";
+                        clearKpiTable();
+                    }
+                    if (result.errors && result.errors.length > 0) {
+                        displayStatus("Processed with some errors: " + result.errors.join("; "), true);
+                    }
+                } else {
+                    displayStatus(result.error + (result.details ? ": " + result.details.join("; ") : ""), true);
+                    document.getElementById("recommendationsOutput").innerHTML = "<p>Error processing files. See status message above.</p>";
+                    rawFullData = [];
+                }
+            } catch (error) {
+                console.error("Upload error:", error);
+                displayStatus("An error occurred during upload: " + error.message, true);
+                document.getElementById("recommendationsOutput").innerHTML = "<p>An unexpected error occurred.</p>";
+                rawFullData = [];
+            }
+        }
+
+        function applyDateFilter() {
+            const startDateString = document.getElementById("startDate").value;
+            const endDateString = document.getElementById("endDate").value;
+
+            if (!rawFullData || rawFullData.length === 0) {
+                // displayStatus("Please upload data first before filtering.", true);
+                // This can happen if applyDateFilter is called before data is loaded.
+                // It will be called again after successful upload.
+                return;
+            }
+
+            let filteredClientData = [...rawFullData];
+
+            if (startDateString && endDateString) {
+                const startDate = new Date(startDateString);
+                const endDate = new Date(endDateString);
+                endDate.setHours(23, 59, 59, 999); // Include the whole end day
+
+                if (startDate > endDate) {
+                    displayStatus("Start date cannot be after end date.", true);
+                    return;
+                }
+                
+                filteredClientData = rawFullData.filter(row => {
+                    // Assuming backend provides 'Date' in a format parsable by new Date()
+                    // Or that MetricsAnalysisEngine already converted it.
+                    // The backend currently sends raw data, so ensure 'Date' field is parsable.
+                    if (!row.Date) return false;
+                    try {
+                        const rowDate = new Date(row.Date);
+                        return rowDate >= startDate && rowDate <= endDate;
+                    } catch (e) {
+                        console.warn("Could not parse date for row: ", row.Date, e);
+                        return false;
+                    }
+                });
+            }
+            
+            if (filteredClientData.length === 0) {
+                displayStatus("No data available for the selected date range or after processing.", false);
+                clearKpiTable();
+                document.getElementById("recommendationsOutput").innerHTML = "<p>No data for selected range.</p>";
+                return;
+            }
+            
+            // Simulate backend processing for KPIs and Recs based on filtered data
+            // This is a simplified client-side recalculation. Ideally, for heavy lifting or complex logic,
+            // you might send the date range to the backend if the dataset is very large.
+            // For MVP, client-side filtering of the full dataset is acceptable.
+            const clientSideKpis = calculateClientSideKpis(filteredClientData);
+            displayKpis(clientSideKpis);
+            
+            // For recommendations, the backend already provided them based on the full dataset.
+            // If recommendations should be date-specific, the backend would need to handle that.
+            // For MVP, we display the backend's recommendations (based on full data) or generate simple ones here.
+            // The current backend sends recommendations based on the full uploaded set.
+            // We will use the backend's recommendations directly if available from the initial fetch.
+            // If not, we can generate some simple ones here for the filtered set.
+            const backendRecs = window.lastBackendRecommendations; // Store this from fetch response
+            if (backendRecs && backendRecs.length > 0) {
+                displayRecommendations(backendRecs);
+            } else {
+                 // Fallback if backend didn't send recs or if we want client-side recs for filtered data
+                const clientSideRecs = generateClientSideRecommendations(filteredClientData, clientSideKpis);
+                displayRecommendations(clientSideRecs);
+            }
+        }
+
+        function calculateClientSideKpis(data) {
+            let totalImpressions = 0, totalClicks = 0, totalSpend = 0, totalSales = 0, totalOrders = 0;
+            data.forEach(row => {
+                totalImpressions += (parseFloat(row["Impressions"]) || 0);
+                totalClicks += (parseFloat(row["Clicks"]) || 0);
+                totalSpend += (parseFloat(row["Spend"]) || 0);
+                totalSales += (parseFloat(row["Sales"]) || 0);
+                totalOrders += (parseFloat(row["Orders"]) || 0);
+            });
+            const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+            const cpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
+            const cvr = totalOrders > 0 && totalClicks > 0 ? (totalOrders / totalClicks) * 100 : 0;
+            const acos = totalSales > 0 ? (totalSpend / totalSales) * 100 : 0;
+            const roas = totalSpend > 0 ? totalSales / totalSpend : 0;
+            // Simplified TACOS - for a real TACOS, you'd need total store sales, not just ad sales.
+            const tacos = totalSales > 0 ? (totalSpend / totalSales) * 100 : 0; 
+
+            return {
+                "Advertising Cost of Sales (ACOS)": acos,
+                "TACOS (Simplified)": tacos, 
+                "Return on Ad Spend (ROAS)": roas,
+                "Total Impressions": totalImpressions,
+                "Total Clicks": totalClicks,
+                "Click-Through Rate (CTR)": ctr,
+                "Total Spend": totalSpend,
+                "Cost Per Click (CPC)": cpc,
+                "Conversion Rate (CVR)": cvr,
+                "Total Sales": totalSales,
+                "Total Orders": totalOrders
+            };
+        }
+
+        function displayKpis(kpis) {
+            document.getElementById("acosValue").textContent = (kpis["Advertising Cost of Sales (ACOS)"] || 0).toFixed(2) + "%";
+            document.getElementById("tacosValue").textContent = (kpis["TACOS (Simplified)"] || 0).toFixed(2) + "%";
+            document.getElementById("roasValue").textContent = (kpis["Return on Ad Spend (ROAS)"] || 0).toFixed(2);
+            document.getElementById("impressionsValue").textContent = (kpis["Total Impressions"] || 0).toLocaleString();
+            document.getElementById("clicksValue").textContent = (kpis["Total Clicks"] || 0).toLocaleString();
+            document.getElementById("ctrValue").textContent = (kpis["Click-Through Rate (CTR)"] || 0).toFixed(2) + "%";
+            document.getElementById("spendValue").textContent = (kpis["Total Spend"] || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
+            document.getElementById("cpcValue").textContent = (kpis["Cost Per Click (CPC)"] || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
+            document.getElementById("cvrValue").textContent = (kpis["Conversion Rate (CVR)"] || 0).toFixed(2) + "%";
+            document.getElementById("salesValue").textContent = (kpis["Total Sales"] || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
+            document.getElementById("ordersValue").textContent = (kpis["Total Orders"] || 0).toLocaleString();
+        }
+
+        function displayRecommendations(recommendationsArray) {
+            const recommendationsDiv = document.getElementById("recommendationsOutput");
+            recommendationsDiv.innerHTML = ""; // Clear previous
+            if (recommendationsArray && recommendationsArray.length > 0) {
+                const ul = document.createElement("ul");
+                recommendationsArray.forEach(rec => {
+                    const li = document.createElement("li");
+                    li.textContent = rec;
+                    ul.appendChild(li);
+                });
+                recommendationsDiv.appendChild(ul);
+            } else {
+                recommendationsDiv.innerHTML = "<p>No specific recommendations available.</p>";
+            }
+        }
+        
+        // This is a fallback if backend doesn't provide recommendations or if we want client-side ones for filtered data
+        function generateClientSideRecommendations(data, kpis) {
+            let recs = [];
+            if (kpis["Advertising 
+(Content truncated due to size limit. Use line ranges to read in chunks)

@@ -45,14 +45,14 @@ try:
         if response_json.get("recommendations"):
             print("Test PASSED: Recommendations received.")
             if len(response_json["recommendations"]) > 0:
-                print(f"Number of recommendations: {len(response_json['recommendations'])}")
+                print(f"Number of recommendations: {len(response_json["recommendations"])}")
             else:
                 print("Test WARN: No recommendations generated, check logic or sample data.")
         else:
             print("Test FAILED: Recommendations missing in response.")
             
         if response_json.get("errors") is not None:
-            print(f"Test WARN: Errors reported by backend: {response_json['errors']}")
+            print(f"Test WARN: Errors reported by backend: {response_json["errors"]}")
         else:
             print("Test PASSED: No errors reported by backend.")
 
